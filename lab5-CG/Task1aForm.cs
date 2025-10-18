@@ -16,5 +16,10 @@ namespace lab5_CG
         {
             InitializeComponent();
         }
+
+        private void Task1aForm_Load(object sender, EventArgs e)
+        {
+
+        }
     }
 }
