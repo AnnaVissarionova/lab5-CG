@@ -30,8 +30,9 @@ namespace lab5_CG
         private void InitializeComponent()
         {
             this.Text = "L-System Fractal";
-            this.Width = 900;
-            this.Height = 900;
+            this.Width = 800;
+            this.Height = 800;
+            this.SizeChanged += Task1aForm_SizeChanged;
 
             btnLoadFile = new Button();
             btnLoadFile.Text = "Load L-System File";
@@ -53,7 +54,8 @@ namespace lab5_CG
 
             canvas = new PictureBox();
             canvas.Location = new Point(10, 50);
-            canvas.Size = new Size(860, 800);
+            canvas.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; // Растягиваем
+            canvas.Size = new Size(this.Width - 40, this.Height - 110); // Динамический размер
             canvas.BorderStyle = BorderStyle.FixedSingle;
             canvas.Paint += Canvas_Paint;
 
@@ -63,6 +65,14 @@ namespace lab5_CG
             this.Controls.Add(canvas);
         }
 
+        private void Task1aForm_SizeChanged(object sender, EventArgs e)
+        {
+            if (canvas != null)
+            {
+                canvas.Invalidate();
+            }
+        }
+
         private void BtnLoadFile_Click(object sender, EventArgs e)
         {
             OpenFileDialog ofd = new OpenFileDialog();
@@ -70,12 +80,9 @@ namespace lab5_CG
             if (ofd.ShowDialog() == DialogResult.OK)
             {
                 LoadLSystem(ofd.FileName);
-
-                // Генерация последовательности (можно изменить количество итераций)
                 string result = GenerateSequence(axiom, (int)numGenerations.Value);
-                points = GeneratePoints(result);
-
-                canvas.Invalidate(); // Перерисовать PictureBox
+                points = GeneratePoints(result); 
+                canvas.Invalidate();
             }
         }
 
@@ -88,7 +95,7 @@ namespace lab5_CG
 
         private void LoadLSystem(string file)
         {
-            var lines = File.ReadAllLines(file);
+            var lines = System.IO.File.ReadAllLines(file);
             if (lines.Length < 1) return;
 
             // Первая строка: <атом> <угол> <начальное направление>
@@ -103,7 +110,10 @@ namespace lab5_CG
                 if (string.IsNullOrWhiteSpace(lines[i])) continue;
                 var ruleParts = lines[i].Split("=");
                 if (ruleParts.Length == 2)
-                    rules[ruleParts[0][0]] = ruleParts[1];
+                {
+                    char symbol = ruleParts[0][0];
+                    rules[symbol] = ruleParts[1];
+                }
             }
         }
 
@@ -147,12 +157,12 @@ namespace lab5_CG
         {
             List<PointF> pts = new List<PointF>();
             Stack<(PointF point, double dir)> stack = new Stack<(PointF, double)>();
-            PointF currentPos = new PointF(canvas.Width / 2, canvas.Height / 2);
+            PointF currentPos = new PointF(0, 0);
             double currentAngle = initialDirection;
 
             pts.Add(currentPos);
 
-            float step = 5f; // длина линии
+            float step = 10f;
 
             foreach (char c in sequence)
             {
@@ -175,21 +185,23 @@ namespace lab5_CG
                         stack.Push((currentPos, currentAngle));
                         break;
                     case ']':
-                        var state = stack.Pop();
-                        currentPos = state.point;
-                        currentAngle = state.dir;
-                        pts.Add(currentPos);
+                        if (stack.Count > 0)
+                        {
+                            var state = stack.Pop();
+                            currentPos = state.point;
+                            currentAngle = state.dir;
+                        }
                         break;
                 }
             }
 
-            pts = ScalePointsToCanvas(pts);
-
             return pts;
         }
 
-        private List<PointF> ScalePointsToCanvas(List<PointF> pts)
+        private List<PointF> ScalePointsToCanvas(List<PointF> pts, int canvasWidth, int canvasHeight)
         {
+            if (pts.Count == 0) return pts;
+
             float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
             foreach (var p in pts)
             {
@@ -201,13 +213,32 @@ namespace lab5_CG
 
             float width = maxX - minX;
             float height = maxY - minY;
-            float scale = Math.Min(canvas.Width / width, canvas.Height / height) * 0.9f;
+
+            if (width == 0) width = 1;
+            if (height == 0) height = 1;
+
+            // отступы
+            float paddingPercent = 0.2f;
+            float paddingHorizontal = canvasWidth * paddingPercent;
+            float paddingVertical = canvasHeight * paddingPercent;
+
+            float availableWidth = canvasWidth - 2 * paddingHorizontal;
+            float availableHeight = canvasHeight - 2 * paddingVertical;
+
+            // Вычисляем масштаб с сохранением пропорций
+            float scaleX = availableWidth / width;
+            float scaleY = availableHeight / height;
+            float scale = Math.Min(scaleX, scaleY);
+
+            // Центрируем
+            float offsetX = paddingHorizontal + (availableWidth - width * scale) / 2;
+            float offsetY = paddingVertical + (availableHeight - height * scale) / 2;
 
             List<PointF> scaled = new List<PointF>();
             foreach (var p in pts)
             {
-                float x = (p.X - minX) * scale + 10;
-                float y = (p.Y - minY) * scale + 10;
+                float x = (p.X - minX) * scale + offsetX;
+                float y = (p.Y - minY) * scale + offsetY;
                 scaled.Add(new PointF(x, y));
             }
             return scaled;
@@ -216,11 +247,14 @@ namespace lab5_CG
         private void Canvas_Paint(object sender, PaintEventArgs e)
         {
             if (points.Count < 2) return;
+
+            List<PointF> scaledPoints = ScalePointsToCanvas(points, canvas.Width, canvas.Height);
+
             using (Pen pen = new Pen(Color.Blue, 1))
             {
-                for (int i = 1; i < points.Count; i++)
+                for (int i = 1; i < scaledPoints.Count; i++)
                 {
-                    e.Graphics.DrawLine(pen, points[i - 1], points[i]);
+                    e.Graphics.DrawLine(pen, scaledPoints[i - 1], scaledPoints[i]);
                 }
             }
         }
