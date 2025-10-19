@@ -1,4 +1,4 @@
 X 90 0
-F→F
-X→X+YF+
-Y→−FX−Y
+F=F
+X=X+YF+
+Y=-FX-Y

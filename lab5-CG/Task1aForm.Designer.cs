@@ -26,20 +26,7 @@
         /// Required method for Designer support - do not modify
         /// the contents of this method with the code editor.
         /// </summary>
-        private void InitializeComponent()
-        {
-            SuspendLayout();
-            // 
-            // Task1aForm
-            // 
-            AutoScaleDimensions = new SizeF(8F, 20F);
-            AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(800, 450);
-            Name = "Task1aForm";
-            Text = "Task1aForm";
-            Load += Task1aForm_Load;
-            ResumeLayout(false);
-        }
+        
 
         #endregion
     }
