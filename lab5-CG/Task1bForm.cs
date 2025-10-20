@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.ComponentModel.Design.Serialization;
 using System.Data;
 using System.Drawing;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -80,7 +82,7 @@ namespace lab5_CG
             if (ofd.ShowDialog() == DialogResult.OK)
             {
                 LoadLSystem(ofd.FileName);
-                GenerateFractal();
+                GenerateFractal(0.5f, 20f);
                 canvas.Invalidate();
             }
         }
@@ -119,89 +121,122 @@ namespace lab5_CG
         {
             if (!string.IsNullOrEmpty(axiom))
             {
-                GenerateFractal();
+                GenerateFractal(0.5f, 20f);
                 canvas.Invalidate();
             }
         }
 
         private string GenerateSequence(string current, int iterations)
         {
-            for (int i = 0; i < iterations; i++)
-            {
-                string next = "";
-                foreach (char c in current)
-                {
-                    if (rules.ContainsKey(c))
-                    {
-                        next += rules[c];
-                    }
-                    else
-                    {
-                        next += c;
-                    }
-                }
-                current = next;
-            }
-            return current;
+            return Task1aForm.GenerateSequence(current, iterations, rules);
         }
 
-        private void GenerateFractal()
+        private void GenerateFractal(float randomPoss, float angleDiff)
         {
             segments.Clear();
             string sequence = GenerateSequence(axiom, (int)numGenerations.Value);
 
-            Stack<State> stack = new Stack<State>();
-            PointF currentPos = new PointF(0, 0);
-            double currentAngle = initialDirection;
-            float currentWidth = 8.0f; // Начальная толщина
+            float currentWidth = 3.0f; // Начальная толщина
             int currentDepth = 0;
 
-            float step = 20f; // Базовый шаг
+            float step = 30f; // Базовый шаг
 
-            foreach (char c in sequence)
+            // Стек для состояний 
+            Stack<State> stateStack = new Stack<State>();
+            // Стек для обработки вложенных выражений
+            Stack<ExpressionContext> expressionStack = new Stack<ExpressionContext>();
+
+            // Начальное состояние
+            State currentState = new State(
+                new PointF(0, 0),
+                initialDirection,
+                currentWidth,
+                currentDepth
+            );
+
+            Random random = new Random();
+            // Обрабатываем последовательность рекурсивно через стек
+            expressionStack.Push(new ExpressionContext(sequence, 0, currentWidth, currentDepth));
+
+            while (expressionStack.Count > 0)
             {
-                switch (c)
+                var context = expressionStack.Pop();
+                string currentExpr = context.Expression;
+                int index = context.Index;
+
+                while (index < currentExpr.Length)
                 {
-                    case 'F':
-                        PointF newPos = new PointF(
-                            currentPos.X + (float)(step * Math.Cos(currentAngle * Math.PI / 180)),
-                            currentPos.Y - (float)(step * Math.Sin(currentAngle * Math.PI / 180))
-                        );
+                    char c = currentExpr[index];
+                    index++;
 
-                        // Сохраняем сегмент с информацией о глубине для цвета
-                        segments.Add(new LineSegment(currentPos, newPos, currentWidth, currentDepth));
-                        currentPos = newPos;
-                        break;
+                    switch (c)
+                    {
+                        case 'F':
+                            // Рисуем линию вперед
+                            PointF newPos = new PointF(
+                                currentState.Position.X + (float)(step * Math.Cos(currentState.Angle * Math.PI / 180)),
+                                currentState.Position.Y - (float)(step * Math.Sin(currentState.Angle * Math.PI / 180))
+                            );
+                            segments.Add(new LineSegment(currentState.Position, newPos, currentWidth, currentDepth));
+                            currentState = new State(newPos, currentState.Angle, currentWidth, currentDepth);
+                            break;
 
-                    case '+':
-                        currentAngle += angle;
-                        break;
+                        case '+':
+                            double randomAngle = angle;
+                            if (random.NextDouble() > randomPoss)
+                               randomAngle = angle + angleDiff; 
+                            currentState = new State(
+                                currentState.Position,
+                                currentState.Angle + randomAngle,
+                                currentWidth,
+                                currentDepth
+                            );
+                            break;
 
-                    case '-':
-                        currentAngle -= angle;
-                        break;
+                        case '-':
+                            double randomAngleM = angle;
+                            if (random.NextDouble() > randomPoss)
+                                randomAngleM = angle + angleDiff;
+                            currentState = new State(
+                                currentState.Position,
+                                currentState.Angle - randomAngleM,
+                                currentWidth,
+                                currentDepth
+                            );
+                            break;
 
-                    case '[':
-                        // Сохраняем текущее состояние
-                        stack.Push(new State(currentPos, currentAngle, currentWidth, currentDepth));
-                        // Уменьшаем толщину для ветвей
-                        currentWidth *= 0.7f;
-                        currentDepth++;
-                        break;
+                        case '[':
+                            // Сохраняем текущее состояние и текущее выражение
+                            stateStack.Push(currentState);
+                            // Сохраняем оставшуюся часть выражения для возврата
+                            expressionStack.Push(new ExpressionContext(currentExpr, index, currentWidth, currentDepth));
+                            // Начинаем новое выражение с пустой строки
+                            currentExpr = "";
+                            index = 0;
+                            currentWidth *= 0.9f;
+                            currentDepth++;
+                            break;
 
-                    case ']':
-                        // Восстанавливаем состояние
-                        if (stack.Count > 0)
-                        {
-                            var state = stack.Pop();
-                            currentPos = state.Position;
-                            currentAngle = state.Angle;
-                            currentWidth = state.Width;
-                            currentDepth = state.Depth;
-                        }
-                        break;
+                        case ']':
+                            // Восстанавливаем состояние и предыдущее выражение
+                            if (stateStack.Count > 0)
+                            {
+                                currentState = stateStack.Pop();
+                                //segments.Add(new LineSegment(currentState.Position, newPos, currentWidth, currentDepth)); // Точка возврата
+                            }
+                            if (expressionStack.Count > 0)
+                            {
+                                var prevContext = expressionStack.Pop();
+                                currentExpr = prevContext.Expression;
+                                index = prevContext.Index;
+                                currentWidth = prevContext.Width;
+                                currentDepth = prevContext.Depth;
+                            }
+                            break;
+                    }
                 }
             }
+          
         }
 
         private List<LineSegment> ScaleSegmentsToCanvas(List<LineSegment> segments, int canvasWidth, int canvasHeight)
@@ -227,7 +262,7 @@ namespace lab5_CG
             if (height == 0) height = 1;
 
             // Отступы от краев
-            float padding = 100f;
+            float padding = 150f;
             float availableWidth = canvasWidth - 2 * padding;
             float availableHeight = canvasHeight - 2 * padding;
 
@@ -314,10 +349,27 @@ namespace lab5_CG
             public float Width { get; }
             public int Depth { get; }
 
+
             public State(PointF position, double angle, float width, int depth)
             {
                 Position = position;
                 Angle = angle;
+                Width = width;
+                Depth = depth;
+            }
+        }
+
+        public class ExpressionContext
+        {
+            public string Expression { get; }
+            public int Index { get; }
+            public float Width { get; }
+            public int Depth { get; }
+
+            public ExpressionContext(string expression, int index, float width, int depth)
+            {
+                Expression = expression;
+                Index = index;
                 Width = width;
                 Depth = depth;
             }
@@ -328,6 +380,8 @@ namespace lab5_CG
         {
             public PointF Start { get; }
             public PointF End { get; }
+
+            //public float Length { get; }
             public float Width { get; }
             public int Depth { get; }
 
@@ -335,6 +389,7 @@ namespace lab5_CG
             {
                 Start = start;
                 End = end;
+                //Length = length;
                 Width = width;
                 Depth = depth;
             }

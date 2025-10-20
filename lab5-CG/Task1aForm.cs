@@ -46,16 +46,16 @@ namespace lab5_CG
 
             numGenerations = new NumericUpDown();
             numGenerations.Minimum = 0;
-            numGenerations.Maximum = 10; // можно увеличить
-            numGenerations.Value = 1; // значение по умолчанию
+            numGenerations.Maximum = 9;
+            numGenerations.Value = 1;
             numGenerations.Location = new Point(300, 10);
             numGenerations.Width = 50;
             numGenerations.ValueChanged += NumGenerations_ValueChanged;
 
             canvas = new PictureBox();
             canvas.Location = new Point(10, 50);
-            canvas.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; // Растягиваем
-            canvas.Size = new Size(this.Width - 40, this.Height - 110); // Динамический размер
+            canvas.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            canvas.Size = new Size(this.Width - 40, this.Height - 110);
             canvas.BorderStyle = BorderStyle.FixedSingle;
             canvas.Paint += Canvas_Paint;
 
@@ -80,8 +80,8 @@ namespace lab5_CG
             if (ofd.ShowDialog() == DialogResult.OK)
             {
                 LoadLSystem(ofd.FileName);
-                string result = GenerateSequence(axiom, (int)numGenerations.Value);
-                points = GeneratePoints(result); 
+                string result = GenerateSequence(axiom, (int)numGenerations.Value, rules);
+                points = GeneratePoints(result, initialDirection, angle);
                 canvas.Invalidate();
             }
         }
@@ -90,7 +90,7 @@ namespace lab5_CG
         {
             numGenerations.Value = 1;
             points.Clear();
-            canvas.Invalidate(); // перерисовать пустой холст
+            canvas.Invalidate();
         }
 
         private void LoadLSystem(string file)
@@ -121,13 +121,13 @@ namespace lab5_CG
         {
             if (!string.IsNullOrEmpty(axiom))
             {
-                string result = GenerateSequence(axiom, (int)numGenerations.Value);
-                points = GeneratePoints(result);
+                string result = GenerateSequence(axiom, (int)numGenerations.Value, rules);
+                points = GeneratePoints(result, initialDirection, angle);
                 canvas.Invalidate();
             }
         }
 
-        private string GenerateSequence(string current, int iterations)
+        public static string GenerateSequence(string current, int iterations, Dictionary<char, string> rules)
         {
             Random rand = new Random();
             for (int i = 0; i < iterations; i++)
@@ -149,53 +149,127 @@ namespace lab5_CG
                     }
                 }
                 current = next;
+
+                if (current.Length > 10000) break;
             }
             return current;
         }
 
-        private List<PointF> GeneratePoints(string sequence)
+        public static List<PointF> GeneratePoints(string sequence, double initialDirection, double angle)
         {
             List<PointF> pts = new List<PointF>();
-            Stack<(PointF point, double dir)> stack = new Stack<(PointF, double)>();
-            PointF currentPos = new PointF(0, 0);
-            double currentAngle = initialDirection;
 
-            pts.Add(currentPos);
+            // Стек для состояний 
+            Stack<State> stateStack = new Stack<State>();
+            // Стек для обработки вложенных выражений
+            Stack<ExpressionContext> expressionStack = new Stack<ExpressionContext>();
 
-            float step = 10f;
+            // Начальное состояние
+            State currentState = new State(
+                new PointF(0, 0),
+                initialDirection
+            );
 
-            foreach (char c in sequence)
+            pts.Add(currentState.Position);
+
+            float step = 8f;
+
+            // Обрабатываем последовательность рекурсивно через стек
+            expressionStack.Push(new ExpressionContext(sequence, 0));
+
+            while (expressionStack.Count > 0)
             {
-                switch (c)
+                var context = expressionStack.Pop();
+                string currentExpr = context.Expression;
+                int index = context.Index;
+
+                while (index < currentExpr.Length)
                 {
-                    case 'F':
-                        currentPos = new PointF(
-                            currentPos.X + (float)(step * Math.Cos(currentAngle * Math.PI / 180)),
-                            currentPos.Y + (float)(step * Math.Sin(currentAngle * Math.PI / 180))
-                        );
-                        pts.Add(currentPos);
-                        break;
-                    case '+':
-                        currentAngle += angle;
-                        break;
-                    case '-':
-                        currentAngle -= angle;
-                        break;
-                    case '[':
-                        stack.Push((currentPos, currentAngle));
-                        break;
-                    case ']':
-                        if (stack.Count > 0)
-                        {
-                            var state = stack.Pop();
-                            currentPos = state.point;
-                            currentAngle = state.dir;
-                        }
-                        break;
+                    char c = currentExpr[index];
+                    index++;
+
+                    switch (c)
+                    {
+                        case 'F':
+                            // Рисуем линию вперед
+                            PointF newPos = new PointF(
+                                currentState.Position.X + (float)(step * Math.Cos(currentState.Angle * Math.PI / 180)),
+                                currentState.Position.Y - (float)(step * Math.Sin(currentState.Angle * Math.PI / 180))
+                            );
+
+                            pts.Add(newPos);
+                            currentState = new State(newPos, currentState.Angle);
+                            break;
+
+                        case '+':
+                            currentState = new State(
+                                currentState.Position,
+                                currentState.Angle + angle
+                            );
+                            break;
+
+                        case '-':
+                            currentState = new State(
+                                currentState.Position,
+                                currentState.Angle - angle
+                            );
+                            break;
+
+                        case '[':
+                            // Сохраняем текущее состояние и текущее выражение
+                            stateStack.Push(currentState);
+                            // Сохраняем оставшуюся часть выражения для возврата
+                            expressionStack.Push(new ExpressionContext(currentExpr, index));
+                            // Начинаем новое выражение с пустой строки
+                            currentExpr = "";
+                            index = 0;
+                            break;
+
+                        case ']':
+                            // Восстанавливаем состояние и предыдущее выражение
+                            if (stateStack.Count > 0)
+                            {
+                                currentState = stateStack.Pop();
+                                pts.Add(currentState.Position); // Точка возврата
+                            }
+                            if (expressionStack.Count > 0)
+                            {
+                                var prevContext = expressionStack.Pop();
+                                currentExpr = prevContext.Expression;
+                                index = prevContext.Index;
+                            }
+                            break;
+                    }
                 }
             }
 
             return pts;
+        }
+
+        // Класс для хранения состояния
+        private class State
+        {
+            public PointF Position { get; }
+            public double Angle { get; }
+
+            public State(PointF position, double angle)
+            {
+                Position = position;
+                Angle = angle;
+            }
+        }
+
+        // Класс для хранения контекста выражения
+        private class ExpressionContext
+        {
+            public string Expression { get; }
+            public int Index { get; }
+
+            public ExpressionContext(string expression, int index)
+            {
+                Expression = expression;
+                Index = index;
+            }
         }
 
         private List<PointF> ScalePointsToCanvas(List<PointF> pts, int canvasWidth, int canvasHeight)
@@ -247,6 +321,8 @@ namespace lab5_CG
         private void Canvas_Paint(object sender, PaintEventArgs e)
         {
             if (points.Count < 2) return;
+
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
             List<PointF> scaledPoints = ScalePointsToCanvas(points, canvas.Width, canvas.Height);
 
