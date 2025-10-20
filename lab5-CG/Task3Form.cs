@@ -428,60 +428,91 @@ namespace lab5_CG
         private void UpdateControlPoints()
         {
             controlPoints.Clear();
-
             if (anchorPoints.Count < 2) return;
 
-            // Для первой точки (всегда гладкая с одной стороны)
+            const float minLength = 5f;
+            const float maxLength = 150f;
+            const float baseLength = 60f;
+            const float adaptiveFactor = 0.4f; // 40% от расстояния
+
+            // Обрабатываем первую точку
             if (anchorPoints.Count >= 2)
             {
                 PointF p0 = anchorPoints[0];
                 PointF p1 = anchorPoints[1];
 
+                // АДАПТИВНАЯ длина: зависит от расстояния до соседней точки
+                float distance = Distance(p0, p1);
+                float length = Math.Min(distance * adaptiveFactor, baseLength);
+
                 Vector direction = new Vector(p1.X - p0.X, p1.Y - p0.Y);
-                direction = direction.Normalize() * 80;
+                direction = direction.Normalize() * Math.Max(minLength, Math.Min(length, maxLength));
+
                 controlPoints.Add(new PointF(p0.X + direction.X, p0.Y + direction.Y));
             }
 
-            // Для промежуточных точек
+            // Обрабатываем промежуточные точки
             for (int i = 1; i < anchorPoints.Count - 1; i++)
             {
                 PointF prev = anchorPoints[i - 1];
                 PointF current = anchorPoints[i];
                 PointF next = anchorPoints[i + 1];
 
+                float distPrev = Distance(prev, current);
+                float distNext = Distance(current, next);
+
+                // АДАПТИВНАЯ длина: берем минимальное расстояние до соседей
+                float length = Math.Min(Math.Min(distPrev, distNext) * adaptiveFactor, baseLength);
+
+                // Ограничиваем длину
+                length = Math.Max(minLength, Math.Min(length, maxLength));
+
                 if (smoothPoints[i])
                 {
-                    // ГЛАДКАЯ ТОЧКА - контрольные точки на одной линии
                     Vector direction = new Vector(next.X - prev.X, next.Y - prev.Y);
-                    direction = direction.Normalize() * 50;
-
+                    direction = direction.Normalize() * length;
                     controlPoints.Add(new PointF(current.X - direction.X, current.Y - direction.Y));
                     controlPoints.Add(new PointF(current.X + direction.X, current.Y + direction.Y));
                 }
                 else
                 {
-                    // УГЛОВАЯ ТОЧКА - контрольные точки независимы
                     Vector dirIn = new Vector(current.X - prev.X, current.Y - prev.Y);
                     Vector dirOut = new Vector(next.X - current.X, next.Y - current.Y);
 
-                    dirIn = dirIn.Normalize() * 50;
-                    dirOut = dirOut.Normalize() * 50;
+                    // Для угловых точек - отдельные адаптивные длины
+                    float lengthIn = Math.Min(distPrev * adaptiveFactor, baseLength);
+                    float lengthOut = Math.Min(distNext * adaptiveFactor, baseLength);
+
+                    lengthIn = Math.Max(minLength, Math.Min(lengthIn, maxLength));
+                    lengthOut = Math.Max(minLength, Math.Min(lengthOut, maxLength));
+
+                    dirIn = dirIn.Normalize() * lengthIn;
+                    dirOut = dirOut.Normalize() * lengthOut;
 
                     controlPoints.Add(new PointF(current.X - dirIn.X, current.Y - dirIn.Y));
                     controlPoints.Add(new PointF(current.X + dirOut.X, current.Y + dirOut.Y));
                 }
             }
 
-            // Для последней точки (всегда гладкая с одной стороны)
+            // Обрабатываем последнюю точку
             if (anchorPoints.Count >= 2)
             {
                 PointF pLast = anchorPoints[anchorPoints.Count - 1];
                 PointF pPrev = anchorPoints[anchorPoints.Count - 2];
 
+                // АДАПТИВНАЯ длина: зависит от расстояния до соседней точки
+                float distance = Distance(pPrev, pLast);
+                float length = Math.Min(distance * adaptiveFactor, baseLength);
+
                 Vector direction = new Vector(pLast.X - pPrev.X, pLast.Y - pPrev.Y);
-                direction = direction.Normalize() * 80;
+                direction = direction.Normalize() * Math.Max(minLength, Math.Min(length, maxLength));
                 controlPoints.Add(new PointF(pLast.X - direction.X, pLast.Y - direction.Y));
             }
+        }
+
+        private float Distance(PointF p1, PointF p2)
+        {
+            return (float)Math.Sqrt(Math.Pow(p2.X - p1.X, 2) + Math.Pow(p2.Y - p1.Y, 2));
         }
 
         private void ResetPoints()
