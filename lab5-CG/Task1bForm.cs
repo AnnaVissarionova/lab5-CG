@@ -17,6 +17,7 @@ namespace lab5_CG
         private Button btnLoadFile;
         private Button btnClear;
         private PictureBox canvas;
+        private TrackBar angleDiffSlider;
         private string axiom;
         private double angle;
         private double initialDirection;
@@ -55,12 +56,35 @@ namespace lab5_CG
             numGenerations.ValueChanged += NumGenerations_ValueChanged;
 
             canvas = new PictureBox();
-            canvas.Location = new Point(10, 50);
+            canvas.Location = new Point(10, 70);
             canvas.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             canvas.Size = new Size(this.Width - 40, this.Height - 110);
             canvas.BorderStyle = BorderStyle.FixedSingle;
             canvas.Paint += Canvas_Paint;
 
+            angleDiffSlider = new TrackBar();
+            angleDiffSlider.Minimum = 0;
+            angleDiffSlider.Maximum = 180;
+            angleDiffSlider.Value = 30; // стартовое значение
+            angleDiffSlider.TickFrequency = 10;
+            angleDiffSlider.SmallChange = 1;
+            angleDiffSlider.LargeChange = 10;
+            angleDiffSlider.Width = 300;
+            angleDiffSlider.Location = new Point(400, 10);
+
+            // 🔹 Обновляем фрактал при изменении угла
+            angleDiffSlider.Scroll += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(axiom))
+                {
+                    float randomPoss = 0f; // уже не нужно, но параметр передаём
+                    float angleDiff = angleDiffSlider.Value;
+                    GenerateFractal(randomPoss, angleDiff);
+                    canvas.Invalidate();
+                }
+            };
+
+            this.Controls.Add(angleDiffSlider);
             this.Controls.Add(btnClear);
             this.Controls.Add(btnLoadFile);
             this.Controls.Add(numGenerations);
@@ -82,7 +106,7 @@ namespace lab5_CG
             if (ofd.ShowDialog() == DialogResult.OK)
             {
                 LoadLSystem(ofd.FileName);
-                GenerateFractal(0.5f, 20f);
+                GenerateFractal(0f, (float)angleDiffSlider.Value);
                 canvas.Invalidate();
             }
         }
@@ -121,10 +145,12 @@ namespace lab5_CG
         {
             if (!string.IsNullOrEmpty(axiom))
             {
-                GenerateFractal(0.5f, 20f);
+                GenerateFractal(0f, (float)angleDiffSlider.Value);
                 canvas.Invalidate();
             }
         }
+
+
 
         private string GenerateSequence(string current, int iterations)
         {
@@ -182,24 +208,18 @@ namespace lab5_CG
                             break;
 
                         case '+':
-                            double randomAngle = angle;
-                            if (random.NextDouble() > randomPoss)
-                               randomAngle = angle + angleDiff; 
                             currentState = new State(
                                 currentState.Position,
-                                currentState.Angle + randomAngle,
+                                currentState.Angle + angleDiff,
                                 currentWidth,
                                 currentDepth
                             );
                             break;
 
                         case '-':
-                            double randomAngleM = angle;
-                            if (random.NextDouble() > randomPoss)
-                                randomAngleM = angle + angleDiff;
                             currentState = new State(
                                 currentState.Position,
-                                currentState.Angle - randomAngleM,
+                                currentState.Angle - angleDiff,
                                 currentWidth,
                                 currentDepth
                             );
@@ -236,7 +256,7 @@ namespace lab5_CG
                     }
                 }
             }
-          
+
         }
 
         private List<LineSegment> ScaleSegmentsToCanvas(List<LineSegment> segments, int canvasWidth, int canvasHeight)
