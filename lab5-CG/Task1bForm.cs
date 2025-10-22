@@ -17,7 +17,10 @@ namespace lab5_CG
         private Button btnLoadFile;
         private Button btnClear;
         private PictureBox canvas;
-        private TrackBar angleDiffSlider;
+        private TrackBar angleVariationSlider;    // Слайдер для величины угла
+        private TrackBar probabilitySlider;       // Слайдер для вероятности
+        private Label lblAngleVariation;
+        private Label lblProbability;
         private string axiom;
         private double angle;
         private double initialDirection;
@@ -33,7 +36,7 @@ namespace lab5_CG
         private void InitializeComponent()
         {
             this.Text = "L-System Fractal Tree with Gradient";
-            this.Width = 800;
+            this.Width = 900;
             this.Height = 800;
             this.SizeChanged += Task1bForm_SizeChanged;
 
@@ -55,40 +58,75 @@ namespace lab5_CG
             numGenerations.Width = 50;
             numGenerations.ValueChanged += NumGenerations_ValueChanged;
 
+            // Слайдер для величины изменения угла
+            lblAngleVariation = new Label();
+            lblAngleVariation.Text = "Angle Variation: 10°";
+            lblAngleVariation.Location = new Point(10, 40);
+            lblAngleVariation.AutoSize = true;
+
+            angleVariationSlider = new TrackBar();
+            angleVariationSlider.Minimum = 0;
+            angleVariationSlider.Maximum = 90;
+            angleVariationSlider.Value = 10; // стартовое значение 10 градусов
+            angleVariationSlider.TickFrequency = 10;
+            angleVariationSlider.SmallChange = 1;
+            angleVariationSlider.LargeChange = 10;
+            angleVariationSlider.Width = 200;
+            angleVariationSlider.Location = new Point(120, 40);
+
+            // Слайдер для вероятности изменения угла
+            lblProbability = new Label();
+            lblProbability.Text = "Random Chance: 50%";
+            lblProbability.Location = new Point(330, 40);
+            lblProbability.AutoSize = true;
+
+            probabilitySlider = new TrackBar();
+            probabilitySlider.Minimum = 0;
+            probabilitySlider.Maximum = 100;
+            probabilitySlider.Value = 50; // стартовое значение 50%
+            probabilitySlider.TickFrequency = 10;
+            probabilitySlider.SmallChange = 5;
+            probabilitySlider.LargeChange = 20;
+            probabilitySlider.Width = 200;
+            probabilitySlider.Location = new Point(440, 40);
+
             canvas = new PictureBox();
-            canvas.Location = new Point(10, 70);
+            canvas.Location = new Point(10, 100);
             canvas.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            canvas.Size = new Size(this.Width - 40, this.Height - 110);
+            canvas.Size = new Size(this.Width - 40, this.Height - 150);
             canvas.BorderStyle = BorderStyle.FixedSingle;
             canvas.Paint += Canvas_Paint;
 
-            angleDiffSlider = new TrackBar();
-            angleDiffSlider.Minimum = 0;
-            angleDiffSlider.Maximum = 180;
-            angleDiffSlider.Value = 30; // стартовое значение
-            angleDiffSlider.TickFrequency = 10;
-            angleDiffSlider.SmallChange = 1;
-            angleDiffSlider.LargeChange = 10;
-            angleDiffSlider.Width = 300;
-            angleDiffSlider.Location = new Point(400, 10);
-
-            // 🔹 Обновляем фрактал при изменении угла
-            angleDiffSlider.Scroll += (s, e) =>
+            // Обработчики для слайдеров
+            angleVariationSlider.Scroll += (s, e) =>
             {
-                if (!string.IsNullOrEmpty(axiom))
-                {
-                    float randomPoss = 0f; // уже не нужно, но параметр передаём
-                    float angleDiff = angleDiffSlider.Value;
-                    GenerateFractal(randomPoss, angleDiff);
-                    canvas.Invalidate();
-                }
+                lblAngleVariation.Text = $"Angle Variation: {angleVariationSlider.Value}°";
+                UpdateFractal();
             };
 
-            this.Controls.Add(angleDiffSlider);
+            probabilitySlider.Scroll += (s, e) =>
+            {
+                lblProbability.Text = $"Random Chance: {probabilitySlider.Value}%";
+                UpdateFractal();
+            };
+
+            this.Controls.Add(lblAngleVariation);
+            this.Controls.Add(angleVariationSlider);
+            this.Controls.Add(lblProbability);
+            this.Controls.Add(probabilitySlider);
             this.Controls.Add(btnClear);
             this.Controls.Add(btnLoadFile);
             this.Controls.Add(numGenerations);
             this.Controls.Add(canvas);
+        }
+
+        private void UpdateFractal()
+        {
+            if (!string.IsNullOrEmpty(axiom))
+            {
+                GenerateFractal();
+                canvas.Invalidate();
+            }
         }
 
         private void Task1bForm_SizeChanged(object sender, EventArgs e)
@@ -106,7 +144,7 @@ namespace lab5_CG
             if (ofd.ShowDialog() == DialogResult.OK)
             {
                 LoadLSystem(ofd.FileName);
-                GenerateFractal(0f, (float)angleDiffSlider.Value);
+                GenerateFractal();
                 canvas.Invalidate();
             }
         }
@@ -143,36 +181,26 @@ namespace lab5_CG
 
         private void NumGenerations_ValueChanged(object sender, EventArgs e)
         {
-            if (!string.IsNullOrEmpty(axiom))
-            {
-                GenerateFractal(0f, (float)angleDiffSlider.Value);
-                canvas.Invalidate();
-            }
+            UpdateFractal();
         }
-
-
 
         private string GenerateSequence(string current, int iterations)
         {
             return Task1aForm.GenerateSequence(current, iterations, rules);
         }
 
-        private void GenerateFractal(float randomPoss, float angleDiff)
+        private void GenerateFractal()
         {
             segments.Clear();
             string sequence = GenerateSequence(axiom, (int)numGenerations.Value);
 
-            float currentWidth = 3.0f; // Начальная толщина
+            float currentWidth = 3.0f;
             int currentDepth = 0;
+            float step = 30f;
 
-            float step = 30f; // Базовый шаг
-
-            // Стек для состояний 
             Stack<State> stateStack = new Stack<State>();
-            // Стек для обработки вложенных выражений
             Stack<ExpressionContext> expressionStack = new Stack<ExpressionContext>();
 
-            // Начальное состояние
             State currentState = new State(
                 new PointF(0, 0),
                 initialDirection,
@@ -181,7 +209,9 @@ namespace lab5_CG
             );
 
             Random random = new Random();
-            // Обрабатываем последовательность рекурсивно через стек
+            float probability = probabilitySlider.Value / 100f; // Преобразуем в диапазон 0-1
+            float angleVariation = angleVariationSlider.Value;  // Величина изменения угла в градусах
+
             expressionStack.Push(new ExpressionContext(sequence, 0, currentWidth, currentDepth));
 
             while (expressionStack.Count > 0)
@@ -198,7 +228,6 @@ namespace lab5_CG
                     switch (c)
                     {
                         case 'F':
-                            // Рисуем линию вперед
                             PointF newPos = new PointF(
                                 currentState.Position.X + (float)(step * Math.Cos(currentState.Angle * Math.PI / 180)),
                                 currentState.Position.Y - (float)(step * Math.Sin(currentState.Angle * Math.PI / 180))
@@ -208,29 +237,42 @@ namespace lab5_CG
                             break;
 
                         case '+':
+                            double actualAnglePlus = angle;
+                            // Применяем случайное изменение с заданной вероятностью
+                            if (random.NextDouble() < probability)
+                            {
+                                // Добавляем случайное отклонение от -angleVariation до +angleVariation
+                                double randomVariation = (random.NextDouble() - 0.5) * 2 * angleVariation;
+                                actualAnglePlus += randomVariation;
+                            }
                             currentState = new State(
                                 currentState.Position,
-                                currentState.Angle + angleDiff,
+                                currentState.Angle + actualAnglePlus,
                                 currentWidth,
                                 currentDepth
                             );
                             break;
 
                         case '-':
+                            double actualAngleMinus = angle;
+                            // Применяем случайное изменение с заданной вероятностью
+                            if (random.NextDouble() < probability)
+                            {
+                                // Добавляем случайное отклонение от -angleVariation до +angleVariation
+                                double randomVariation = (random.NextDouble() - 0.5) * 2 * angleVariation;
+                                actualAngleMinus += randomVariation;
+                            }
                             currentState = new State(
                                 currentState.Position,
-                                currentState.Angle - angleDiff,
+                                currentState.Angle - actualAngleMinus,
                                 currentWidth,
                                 currentDepth
                             );
                             break;
 
                         case '[':
-                            // Сохраняем текущее состояние и текущее выражение
                             stateStack.Push(currentState);
-                            // Сохраняем оставшуюся часть выражения для возврата
                             expressionStack.Push(new ExpressionContext(currentExpr, index, currentWidth, currentDepth));
-                            // Начинаем новое выражение с пустой строки
                             currentExpr = "";
                             index = 0;
                             currentWidth *= 0.9f;
@@ -238,11 +280,9 @@ namespace lab5_CG
                             break;
 
                         case ']':
-                            // Восстанавливаем состояние и предыдущее выражение
                             if (stateStack.Count > 0)
                             {
                                 currentState = stateStack.Pop();
-                                //segments.Add(new LineSegment(currentState.Position, newPos, currentWidth, currentDepth)); // Точка возврата
                             }
                             if (expressionStack.Count > 0)
                             {
@@ -256,14 +296,12 @@ namespace lab5_CG
                     }
                 }
             }
-
         }
 
         private List<LineSegment> ScaleSegmentsToCanvas(List<LineSegment> segments, int canvasWidth, int canvasHeight)
         {
             if (segments.Count == 0) return segments;
 
-            // Находим границы всех сегментов
             float minX = float.MaxValue, maxX = float.MinValue;
             float minY = float.MaxValue, maxY = float.MinValue;
 
@@ -281,21 +319,17 @@ namespace lab5_CG
             if (width == 0) width = 1;
             if (height == 0) height = 1;
 
-            // Отступы от краев
             float padding = 150f;
             float availableWidth = canvasWidth - 2 * padding;
             float availableHeight = canvasHeight - 2 * padding;
 
-            // Масштаб с сохранением пропорций
             float scaleX = availableWidth / width;
             float scaleY = availableHeight / height;
             float scale = Math.Min(scaleX, scaleY);
 
-            // Центрируем
             float offsetX = padding + (availableWidth - width * scale) / 2 - minX * scale;
             float offsetY = padding + (availableHeight - height * scale) / 2 - minY * scale;
 
-            // Масштабируем все сегменты
             List<LineSegment> scaled = new List<LineSegment>();
             foreach (var segment in segments)
             {
@@ -317,17 +351,14 @@ namespace lab5_CG
 
         private Color GetColorForDepth(int depth, int maxDepth)
         {
-            // Градиент от коричневого к зеленому в зависимости от глубины
             if (maxDepth == 0) maxDepth = 1;
 
             float ratio = (float)depth / maxDepth;
 
-            // Коричневый (101, 67, 33) -> Зеленый (34, 139, 34)
             int r = (int)(101 + (34 - 101) * ratio);
             int g = (int)(67 + (139 - 67) * ratio);
             int b = (int)(33 + (34 - 33) * ratio);
 
-            // Ограничиваем значения
             r = Math.Max(0, Math.Min(255, r));
             g = Math.Max(0, Math.Min(255, g));
             b = Math.Max(0, Math.Min(255, b));
@@ -341,13 +372,10 @@ namespace lab5_CG
 
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-            // Масштабируем сегменты под холст
             List<LineSegment> scaledSegments = ScaleSegmentsToCanvas(segments, canvas.Width, canvas.Height);
 
-            // Находим максимальную глубину для градиента
             int maxDepth = segments.Max(s => s.Depth);
 
-            // Рисуем все сегменты
             foreach (var segment in scaledSegments)
             {
                 Color color = GetColorForDepth(segment.Depth, maxDepth);
@@ -361,14 +389,12 @@ namespace lab5_CG
             }
         }
 
-        // Класс для хранения состояния
         private class State
         {
             public PointF Position { get; }
             public double Angle { get; }
             public float Width { get; }
             public int Depth { get; }
-
 
             public State(PointF position, double angle, float width, int depth)
             {
@@ -395,13 +421,10 @@ namespace lab5_CG
             }
         }
 
-        // Класс для хранения сегмента линии
         private class LineSegment
         {
             public PointF Start { get; }
             public PointF End { get; }
-
-            //public float Length { get; }
             public float Width { get; }
             public int Depth { get; }
 
@@ -409,7 +432,6 @@ namespace lab5_CG
             {
                 Start = start;
                 End = end;
-                //Length = length;
                 Width = width;
                 Depth = depth;
             }
